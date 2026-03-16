@@ -1,0 +1,7 @@
+{
+  "name": "arche-simple-vercel",
+  "private": true,
+  "version": "1.0.0",
+  "description": "아르케 영어 도우미 - 학생용 초간단 Vercel 배포용",
+  "license": "UNLICENSED"
+}

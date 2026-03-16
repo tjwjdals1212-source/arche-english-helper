@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>아르케 영어 도우미</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f4f7fb; color: #1f2937; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 18px; }
+    .hero, .card { background: #fff; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); padding: 18px; margin-bottom: 16px; }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    h2 { margin: 0 0 10px; font-size: 22px; }
+    .sub { color: #6b7280; line-height: 1.6; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    label { display: block; margin: 10px 0 6px; font-weight: 700; font-size: 14px; color: #374151; }
+    input, textarea {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 12px; padding: 12px; font-size: 15px; outline: none;
+    }
+    textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    button {
+      border: none; border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; cursor: pointer;
+      background: #0f766e; color: white;
+    }
+    button.secondary { background: #475569; }
+    .output {
+      margin-top: 14px; padding: 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #e5e7eb;
+      white-space: pre-wrap; line-height: 1.7; min-height: 120px;
+    }
+    .ok { color: #166534; }
+    .err { color: #b91c1c; }
+    .badge {
+      display: inline-block; padding: 5px 10px; border-radius: 999px; background: #ecfeff; color: #115e59;
+      font-size: 12px; font-weight: 700; margin-bottom: 10px;
+    }
+    .small { font-size: 12px; color: #6b7280; line-height: 1.6; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>아르케 영어 도우미</h1>
+      <div class="sub">
+        학생용 초간단 버전입니다.<br>
+        1) 단어 뜻 찾기 + 발음 듣기<br>
+        2) 문장 넣으면 틀린 부분과 올바른 문장 알려주기
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="badge">기능 1</div>
+        <h2>단어 뜻 + 발음</h2>
+        <label for="wordInput">영단어</label>
+        <input id="wordInput" type="text" placeholder="example" />
+        <div class="row">
+          <button onclick="lookupWord()">뜻 찾기</button>
+          <button class="secondary" onclick="speakWord()">발음 듣기</button>
+        </div>
+        <div id="wordOutput" class="output">여기에 뜻, 품사, 예문이 표시됩니다.</div>
+      </div>
+
+      <div class="card">
+        <div class="badge">기능 2</div>
+        <h2>문장 오류 점검</h2>
+        <label for="sentenceInput">영문장 입력</label>
+        <textarea id="sentenceInput" placeholder="He go to school yesterday."></textarea>
+        <div class="row">
+          <button onclick="checkSentence()">문장 검사</button>
+          <button class="secondary" onclick="copyResult('sentenceOutput')">결과 복사</button>
+        </div>
+        <div id="sentenceOutput" class="output">여기에 틀린 부분, 이유, 올바른 문장이 표시됩니다.</div>
+      </div>
+
+      <div class="card">
+        <div class="badge">관리자 확인용</div>
+        <h2>연결 테스트</h2>
+        <div class="row">
+          <button onclick="testConnection()">연결 테스트</button>
+        </div>
+        <div id="testOutput" class="output">여기에 연결 상태가 표시됩니다.</div>
+        <div class="small">학생에게는 이 버튼을 굳이 안내하지 않아도 됩니다.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function callApi(mode, text) {
+  const res = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, text })
+  });
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('응답 해석에 실패했습니다.');
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || '서버 오류가 발생했습니다.');
+  }
+  return data.result || '응답이 없습니다.';
+}
+
+async function testConnection() {
+  const out = document.getElementById('testOutput');
+  out.textContent = '연결 테스트 중...';
+  try {
+    const result = await callApi('test', '연결 테스트');
+    out.innerHTML = '<span class="ok">' + escapeHtml(result.trim()) + '</span>';
+  } catch (e) {
+    out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+async function lookupWord() {
+  const word = document.getElementById('wordInput').value.trim();
+  const out = document.getElementById('wordOutput');
+  if (!word) {
+    out.textContent = '단어를 입력하세요.';
+    return;
+  }
+  out.textContent = '뜻을 찾는 중...';
+  try {
+    const result = await callApi('word', word);
+    out.textContent = result;
+  } catch (e) {
+    out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+function speakWord() {
+  const word = document.getElementById('wordInput').value.trim();
+  const out = document.getElementById('wordOutput');
+  if (!word) {
+    out.textContent = '발음을 들을 단어를 입력하세요.';
+    return;
+  }
+  if (!('speechSynthesis' in window)) {
+    out.innerHTML = '<span class="err">이 브라우저는 발음 기능을 지원하지 않습니다.</span>';
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(word);
+  utter.lang = 'en-US';
+  utter.rate = 0.9;
+  window.speechSynthesis.speak(utter);
+  out.innerHTML = '<span class="ok">발음을 재생했습니다:</span> ' + escapeHtml(word);
+}
+
+async function checkSentence() {
+  const text = document.getElementById('sentenceInput').value.trim();
+  const out = document.getElementById('sentenceOutput');
+  if (!text) {
+    out.textContent = '문장을 입력하세요.';
+    return;
+  }
+  out.textContent = '문장 검사 중...';
+  try {
+    const result = await callApi('sentence', text);
+    out.textContent = result;
+  } catch (e) {
+    out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+async function copyResult(id) {
+  const text = document.getElementById(id).innerText.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('복사되었습니다.');
+  } catch {
+    alert('복사에 실패했습니다.');
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+</script>
+</body>
+</html>
