@@ -35,16 +35,44 @@
       font-size: 12px; font-weight: 700; margin-bottom: 10px;
     }
     .small { font-size: 12px; color: #6b7280; line-height: 1.6; margin-top: 8px; }
+    .hidden { display: none; }
+    .center-card {
+      max-width: 540px;
+      margin: 40px auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+      padding: 22px;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div id="gateScreen" class="wrap">
+    <div class="center-card">
+      <div class="badge">입장 비밀번호</div>
+      <h1>아르케 영어 도우미</h1>
+      <div class="sub">
+        비밀번호를 입력해야 사용할 수 있습니다.
+      </div>
+      <label for="sitePassword">비밀번호</label>
+      <input id="sitePassword" type="password" placeholder="비밀번호를 입력하세요" />
+      <div class="row">
+        <button onclick="enterSite()">입장하기</button>
+      </div>
+      <div id="gateOutput" class="output">여기에 안내 문구가 표시됩니다.</div>
+      <div class="small">
+        비밀번호가 맞아야 들어갈 수 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <div id="appScreen" class="wrap hidden">
     <div class="hero">
       <h1>아르케 영어 도우미</h1>
       <div class="sub">
-        학생용 초간단 버전입니다.<br>
+        학생용 최종 버전입니다.<br>
         1) 단어 뜻 찾기 + 발음 듣기<br>
-        2) 문장 넣으면 틀린 부분과 올바른 문장 알려주기
+        2) 문장 넣으면 틀린 부분, 가능한 올바른 문장 여러 개, 차이까지 알려주기
       </div>
     </div>
 
@@ -70,27 +98,116 @@
           <button onclick="checkSentence()">문장 검사</button>
           <button class="secondary" onclick="copyResult('sentenceOutput')">결과 복사</button>
         </div>
-        <div id="sentenceOutput" class="output">여기에 틀린 부분, 이유, 올바른 문장이 표시됩니다.</div>
-      </div>
-
-      <div class="card">
-        <div class="badge">관리자 확인용</div>
-        <h2>연결 테스트</h2>
-        <div class="row">
-          <button onclick="testConnection()">연결 테스트</button>
-        </div>
-        <div id="testOutput" class="output">여기에 연결 상태가 표시됩니다.</div>
-        <div class="small">학생에게는 이 버튼을 굳이 안내하지 않아도 됩니다.</div>
+        <div id="sentenceOutput" class="output">여기에 틀린 부분, 이유, 가능한 올바른 문장, 차이가 표시됩니다.</div>
       </div>
     </div>
   </div>
 
 <script>
-async function callApi(mode, text) {
+let siteUnlocked = false;
+
+function showApp() {
+  document.getElementById('gateScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+}
+
+async function enterSite() {
+  const pw = document.getElementById('sitePassword').value.trim();
+  const out = document.getElementById('gateOutput');
+  if (!pw) {
+    out.innerHTML = '<span class="err">비밀번호를 입력하세요.</span>';
+    return;
+  }
+
+  out.textContent = '확인 중...';
+
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      out.innerHTML = '<span class="err">' + escapeHtml(data.error || '비밀번호 확인 실패') + '</span>';
+      return;
+    }
+
+    if (data.ok) {
+      siteUnlocked = true;
+      out.innerHTML = '<span class="ok">입장 성공</span>';
+      showApp();
+    } else {
+      out.innerHTML = '<span class="err">비밀번호가 틀렸습니다.</span>';
+    }
+  } catch (e) {
+    out.innerHTML = '<span class="err">서버 연결 중 오류가 발생했습니다.</span>';
+  }
+}
+
+function getPasswordOrThrow() {
+  if (!siteUnlocked) {
+    throw new Error('먼저 비밀번호를 입력해야 합니다.');
+  }
+
+  return document.getElementById('sitePassword').value.trim();
+}
+
+function getWordCacheKey(word) {
+  return 'arke-word-cache:' + String(word || '').trim().toLowerCase();
+}
+
+function readWordCache(word) {
+  try {
+    const raw = localStorage.getItem(getWordCacheKey(word));
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.result ? parsed.result : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function writeWordCache(word, result) {
+  try {
+    localStorage.setItem(getWordCacheKey(word), JSON.stringify({
+      result,
+      savedAt: Date.now()
+    }));
+  } catch (e) {
+    // ignore cache write failures
+  }
+}
+
+async function callWordApi(text) {
+  const password = getPasswordOrThrow();
+  const res = await fetch('/api/word', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, password })
+  });
+
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('응답 해석에 실패했습니다.');
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || '단어 조회 중 서버 오류가 발생했습니다.');
+  }
+
+  return data.result || '응답이 없습니다.';
+}
+
+async function callSentenceApi(text) {
+  const password = getPasswordOrThrow();
   const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, text })
+    body: JSON.stringify({ mode: 'sentence', text, password })
   });
 
   let data = {};
@@ -103,18 +220,8 @@ async function callApi(mode, text) {
   if (!res.ok) {
     throw new Error(data.error || '서버 오류가 발생했습니다.');
   }
-  return data.result || '응답이 없습니다.';
-}
 
-async function testConnection() {
-  const out = document.getElementById('testOutput');
-  out.textContent = '연결 테스트 중...';
-  try {
-    const result = await callApi('test', '연결 테스트');
-    out.innerHTML = '<span class="ok">' + escapeHtml(result.trim()) + '</span>';
-  } catch (e) {
-    out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
-  }
+  return data.result || '응답이 없습니다.';
 }
 
 async function lookupWord() {
@@ -124,9 +231,17 @@ async function lookupWord() {
     out.textContent = '단어를 입력하세요.';
     return;
   }
+
+  const cached = readWordCache(word);
+  if (cached) {
+    out.textContent = cached;
+    return;
+  }
+
   out.textContent = '뜻을 찾는 중...';
   try {
-    const result = await callApi('word', word);
+    const result = await callWordApi(word);
+    writeWordCache(word, result);
     out.textContent = result;
   } catch (e) {
     out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
@@ -161,7 +276,7 @@ async function checkSentence() {
   }
   out.textContent = '문장 검사 중...';
   try {
-    const result = await callApi('sentence', text);
+    const result = await callSentenceApi(text);
     out.textContent = result;
   } catch (e) {
     out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
