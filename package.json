@@ -3,5 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "description": "아르케 영어 도우미 - 학생용 최종 비밀번호 버전 v2",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "22.x"
+  }
 }
