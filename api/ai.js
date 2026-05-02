@@ -3,6 +3,17 @@ function isAuthorized(reqPassword) {
   return pw && reqPassword && pw === reqPassword;
 }
 
+function normalizeSentence(text) {
+  return String(text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function getSentenceCache() {
+  if (!globalThis.__ARKE_SENTENCE_CACHE__) {
+    globalThis.__ARKE_SENTENCE_CACHE__ = new Map();
+  }
+  return globalThis.__ARKE_SENTENCE_CACHE__;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST 요청만 가능합니다.' });
@@ -23,6 +34,13 @@ export default async function handler(req, res) {
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: '문장을 입력해주세요.' });
+    }
+
+    const sentenceKey = normalizeSentence(text);
+    const cache = getSentenceCache();
+    const cached = cache.get(sentenceKey);
+    if (cached) {
+      return res.status(200).json({ result: cached, cached: true });
     }
 
     const systemPrompt =
@@ -69,6 +87,7 @@ ${text}
             content: [{ type: 'input_text', text: userPrompt }],
           },
         ],
+        max_output_tokens: 650,
       }),
     });
 
@@ -97,7 +116,10 @@ ${text}
       result = texts.join('\n');
     }
 
-    return res.status(200).json({ result: result || '응답이 비어 있습니다.' });
+    const finalResult = result || '응답이 비어 있습니다.';
+    cache.set(sentenceKey, finalResult);
+
+    return res.status(200).json({ result: finalResult, cached: false });
   } catch (error) {
     return res.status(500).json({ error: error.message || '서버 오류가 발생했습니다.' });
   }

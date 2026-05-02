@@ -180,6 +180,166 @@ function writeWordCache(word, result) {
   }
 }
 
+function normalizeSentenceText(text) {
+  return String(text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function getSentenceCacheKey(text) {
+  return 'arke-sentence-cache-v1:' + normalizeSentenceText(text);
+}
+
+function readSentenceCache(text) {
+  try {
+    const raw = localStorage.getItem(getSentenceCacheKey(text));
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.result ? parsed.result : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function writeSentenceCache(text, result) {
+  try {
+    localStorage.setItem(getSentenceCacheKey(text), JSON.stringify({
+      result,
+      savedAt: Date.now()
+    }));
+  } catch (e) {
+    // ignore cache write failures
+  }
+}
+
+function toIngForm(verb) {
+  const lower = String(verb || '').toLowerCase();
+  const special = {
+    run: 'running',
+    swim: 'swimming',
+    sit: 'sitting',
+    stop: 'stopping',
+    make: 'making',
+    write: 'writing',
+    come: 'coming',
+    take: 'taking',
+    have: 'having',
+    study: 'studying',
+  };
+  if (special[lower]) return special[lower];
+  if (lower.endsWith('e')) return lower.slice(0, -1) + 'ing';
+  return lower + 'ing';
+}
+
+function toThirdPersonForm(verb) {
+  const lower = String(verb || '').toLowerCase();
+  const special = { have: 'has', do: 'does', go: 'goes' };
+  if (special[lower]) return special[lower];
+  if (lower.endsWith('y') && !/[aeiou]y$/.test(lower)) return lower.slice(0, -1) + 'ies';
+  if (/(s|x|ch|sh|o)$/.test(lower)) return lower + 'es';
+  return lower + 's';
+}
+
+function getQuickSentenceResult(text) {
+  const original = String(text || '').trim().replace(/\s+/g, ' ');
+  const lower = original.toLowerCase().replace(/[.?!]+$/g, '');
+  const commonVerbs = 'swim|go|eat|play|study|run|walk|sleep|read|write|speak|make|do|have|take|come|see|watch|listen|drink';
+
+  const beVerbMatch = lower.match(new RegExp('^(i|you|he|she|it|we|they)\\s+(am|is|are|was|were)\\s+(' + commonVerbs + ')(\\s+.*)?$'));
+  if (beVerbMatch) {
+    const subject = beVerbMatch[1];
+    const beVerb = beVerbMatch[2];
+    const verb = beVerbMatch[3];
+    const rest = beVerbMatch[4] || '';
+    const subjectText = subject.charAt(0).toUpperCase() + subject.slice(1);
+    const progressive = `${subjectText} ${beVerb} ${toIngForm(verb)}${rest}.`;
+    const simple = `${subjectText} ${verb}${rest}.`;
+
+    return `빠른 검사 결과
+1) 맞는 문장인지 먼저 말하기
+틀린 문장입니다.
+
+2) 틀린 부분
+"${beVerb} ${verb}" 부분이 어색합니다.
+
+3) 왜 틀렸는지
+"${beVerb}"는 be동사이고, "${verb}"도 일반동사 원형입니다. 영어에서는 보통 동사 역할을 하는 말이 이렇게 바로 두 개 붙으면 안 됩니다.
+
+4) 한국어로 직역하면 왜 어색한지
+"나는 ${verb}하다이다"처럼 들려서 자연스럽지 않습니다.
+
+5) 가능한 올바른 문장
+- 지금 하고 있는 동작이면: ${progressive}
+- 평소에 하는 일이나 사실이면: ${simple}
+
+6) 문장들 사이의 차이
+be동사 + -ing는 "지금 하고 있다"는 느낌이고, 일반동사만 쓰면 "평소에 한다/사실이다"는 느낌입니다.
+
+7) 다음에 기억할 규칙
+be동사 뒤에 일반동사를 바로 쓰려면 보통 동사에 -ing를 붙입니다.`;
+  }
+
+  const wantMatch = lower.match(new RegExp('\\b(want|wants|wanted)\\s+(' + commonVerbs + ')\\b'));
+  if (wantMatch) {
+    const wantVerb = wantMatch[1];
+    const nextVerb = wantMatch[2];
+    const fixed = original.replace(new RegExp('\\b' + wantVerb + '\\s+' + nextVerb + '\\b', 'i'), `${wantVerb} to ${nextVerb}`);
+
+    return `빠른 검사 결과
+1) 맞는 문장인지 먼저 말하기
+틀린 문장입니다.
+
+2) 틀린 부분
+"${wantVerb} ${nextVerb}" 부분에서 "to"가 빠졌습니다.
+
+3) 왜 틀렸는지
+want 뒤에 다른 동작을 말할 때는 보통 "want to + 동사원형"을 씁니다.
+
+4) 한국어로 직역하면 왜 어색한지
+"원한다 가다"처럼 말이 이어져서 자연스럽지 않습니다.
+
+5) 가능한 올바른 문장
+- ${fixed.endsWith('.') ? fixed : fixed + '.'}
+
+6) 문장들 사이의 차이
+"want to"는 "~하고 싶다"라는 뜻을 만드는 묶음입니다.
+
+7) 다음에 기억할 규칙
+want 다음에 행동이 나오면 "want to 동사원형"을 먼저 떠올리세요.`;
+  }
+
+  const thirdPersonMatch = lower.match(new RegExp('^(he|she|it)\\s+(' + commonVerbs + ')(\\s+.*)?$'));
+  if (thirdPersonMatch) {
+    const subject = thirdPersonMatch[1];
+    const verb = thirdPersonMatch[2];
+    const rest = thirdPersonMatch[3] || '';
+    const subjectText = subject.charAt(0).toUpperCase() + subject.slice(1);
+    const fixedVerb = toThirdPersonForm(verb);
+
+    return `빠른 검사 결과
+1) 맞는 문장인지 먼저 말하기
+틀린 문장일 가능성이 큽니다.
+
+2) 틀린 부분
+"${subject} ${verb}" 부분을 확인해야 합니다.
+
+3) 왜 틀렸는지
+현재 시제에서 주어가 he, she, it이면 일반동사에 보통 -s 또는 -es를 붙입니다.
+
+4) 한국어로 직역하면 왜 어색한지
+뜻은 통하지만, 영어 문법에서는 주어와 동사의 모양이 맞지 않습니다.
+
+5) 가능한 올바른 문장
+- ${subjectText} ${fixedVerb}${rest}.
+
+6) 문장들 사이의 차이
+"${verb}"는 I/you/we/they에 더 잘 맞고, "${fixedVerb}"는 he/she/it에 맞습니다.
+
+7) 다음에 기억할 규칙
+현재 시제에서 he/she/it 뒤 일반동사는 s를 확인하세요.`;
+  }
+
+  return '';
+}
+
 async function callWordApi(text) {
   const password = getPasswordOrThrow();
   const res = await fetch('/api/word', {
@@ -273,9 +433,24 @@ async function checkSentence() {
     out.textContent = '문장을 입력하세요.';
     return;
   }
-  out.textContent = '문장 검사 중...';
+
+  const cached = readSentenceCache(text);
+  if (cached) {
+    out.textContent = cached;
+    return;
+  }
+
+  const quickResult = getQuickSentenceResult(text);
+  if (quickResult) {
+    writeSentenceCache(text, quickResult);
+    out.textContent = quickResult;
+    return;
+  }
+
+  out.textContent = 'AI 문장 검사 중... 처음 검사하는 문장은 몇 초 걸릴 수 있습니다.';
   try {
     const result = await callSentenceApi(text);
+    writeSentenceCache(text, result);
     out.textContent = result;
   } catch (e) {
     out.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
