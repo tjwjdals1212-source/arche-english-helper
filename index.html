@@ -264,7 +264,6 @@ function speakWord() {
   utter.lang = 'en-US';
   utter.rate = 0.9;
   window.speechSynthesis.speak(utter);
-  out.innerHTML = '<span class="ok">발음을 재생했습니다:</span> ' + escapeHtml(word);
 }
 
 async function checkSentence() {
