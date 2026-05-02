@@ -155,7 +155,7 @@ function getPasswordOrThrow() {
 }
 
 function getWordCacheKey(word) {
-  return 'arke-word-cache:' + String(word || '').trim().toLowerCase();
+  return 'arke-word-cache-v2:' + String(word || '').trim().toLowerCase();
 }
 
 function readWordCache(word) {
