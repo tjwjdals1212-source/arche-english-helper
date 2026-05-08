@@ -36,6 +36,19 @@
     }
     .small { font-size: 12px; color: #6b7280; line-height: 1.6; margin-top: 8px; }
     .hidden { display: none; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .check-row input {
+      width: auto;
+      margin: 0;
+    }
     .center-card {
       max-width: 540px;
       margin: 40px auto;
@@ -56,6 +69,10 @@
       </div>
       <label for="sitePassword">비밀번호</label>
       <input id="sitePassword" type="password" placeholder="비밀번호를 입력하세요" />
+      <label class="check-row" for="rememberPassword">
+        <input id="rememberPassword" type="checkbox" />
+        <span>이 기기에 비밀번호 저장</span>
+      </label>
       <div class="row">
         <button onclick="enterSite()">입장하기</button>
       </div>
@@ -105,10 +122,31 @@
 
 <script>
 let siteUnlocked = false;
+const SAVED_PASSWORD_KEY = 'arche-helper-saved-password-v1';
 
 function showApp() {
   document.getElementById('gateScreen').classList.add('hidden');
   document.getElementById('appScreen').classList.remove('hidden');
+}
+
+function loadRememberedPassword() {
+  try {
+    return localStorage.getItem(SAVED_PASSWORD_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function saveRememberedPassword(password) {
+  try {
+    if (document.getElementById('rememberPassword').checked) {
+      localStorage.setItem(SAVED_PASSWORD_KEY, password);
+    } else {
+      localStorage.removeItem(SAVED_PASSWORD_KEY);
+    }
+  } catch (e) {
+    // Private browsing or strict browser settings can block localStorage.
+  }
 }
 
 async function enterSite() {
@@ -136,6 +174,7 @@ async function enterSite() {
 
     if (data.ok) {
       siteUnlocked = true;
+      saveRememberedPassword(pw);
       out.innerHTML = '<span class="ok">입장 성공</span>';
       showApp();
     } else {
@@ -145,6 +184,15 @@ async function enterSite() {
     out.innerHTML = '<span class="err">서버 연결 중 오류가 발생했습니다.</span>';
   }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const savedPassword = loadRememberedPassword();
+  if (savedPassword) {
+    document.getElementById('sitePassword').value = savedPassword;
+    document.getElementById('rememberPassword').checked = true;
+    enterSite();
+  }
+});
 
 function getPasswordOrThrow() {
   if (!siteUnlocked) {
